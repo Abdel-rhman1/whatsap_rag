@@ -1,0 +1,126 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: rag-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    networks:
+      - rag-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: nginx:alpine
+    container_name: rag-web
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - .:/var/www
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+    networks:
+      - rag-network
+    depends_on:
+      - app
+
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+    ports:
+      - "3306:3306"
+    volumes:
+      - rag-mysql:/var/lib/mysql
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: rag-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - rag-qdrant:/qdrant/storage
+    networks:
+      - rag-network
+
+  ollama:
+    image: ollama/ollama
+    container_name: rag-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - rag-ollama:/root/.ollama
+    networks:
+      - rag-network
+
+  whatsapp-gateway:
+    build:
+      context: ./whatsapp-gateway
+    container_name: rag-whatsapp
+    restart: unless-stopped
+    environment:
+      LARAVEL_WEBHOOK_URL: http://web/api/whatsapp/webhook
+      WHATSAPP_SECRET: ${WHATSAPP_SECRET}
+    ports:
+      - "3000:3000"
+    networks:
+      - rag-network
+    depends_on:
+      - web
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: rag-worker
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    command: php artisan queue:work --tries=3 --timeout=90
+    networks:
+      - rag-network
+    depends_on:
+      - app
+      - redis
+
+networks:
+  rag-network:
+    driver: bridge
+
+volumes:
+  rag-mysql:
+  rag-qdrant:
+  rag-ollama:

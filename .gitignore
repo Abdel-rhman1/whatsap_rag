@@ -1,0 +1,36 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+node_modules/
+**/node_modules/
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+# WhatsApp Gateway
+whatsapp-gateway/auth/
+whatsapp-gateway/media/
+whatsapp-gateway/*.log
+whatsapp-gateway/*.out
+whatsapp-gateway/*.deb
+
+# Database & SQLite
+database/*.sqlite
+database/*.sqlite-journal
