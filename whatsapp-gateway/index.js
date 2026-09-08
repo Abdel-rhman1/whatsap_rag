@@ -54,6 +54,7 @@ app.use('/media', express.static(MEDIA_DIR));
 // Memory storage for active sessions
 const sessions = {};
 const qrCodes = {};
+const qrTimestamps = {};
 const sessionStatus = {}; // 'INITIALIZING', 'QR_READY', 'AUTHENTICATING', 'LINKING', 'CONNECTED', 'FAILED'
 const sessionPhones = {};
 
@@ -128,6 +129,7 @@ async function startSession(id, force = false) {
             if (qr) {
                 log(id, 'New QR code generated. Waiting for scan...');
                 qrCodes[id] = qr;
+                qrTimestamps[id] = Date.now();
                 sessionStatus[id] = 'QR_READY';
             }
 
@@ -144,6 +146,7 @@ async function startSession(id, force = false) {
                 // Clean up session reference
                 delete sessions[id];
                 delete qrCodes[id];
+                delete qrTimestamps[id];
 
                 if (isLoggedOut) {
                     log(id, 'Logged out permanently. Deleting session data.');
@@ -166,6 +169,7 @@ async function startSession(id, force = false) {
                 sessionStatus[id] = 'CONNECTED';
                 sessionPhones[id] = phone;
                 delete qrCodes[id];
+                delete qrTimestamps[id];
             }
 
             else if (connection === 'connecting') {
@@ -284,7 +288,7 @@ async function forwardToWebhook(instanceId, from, pushName, body, type = 'text',
                 'Content-Type': 'application/json',
                 'X-WHATSAPP-SIGNATURE': signature
             },
-            timeout: 10000 // 10s timeout for webhook
+            timeout: 35000 // 35s timeout for webhook & RAG processing
         });
     } catch (e) {
         const errorMsg = e.response?.data?.message || e.message;
@@ -326,6 +330,7 @@ app.get('/status/:id', (req, res) => {
         id,
         status: sessionStatus[id] || 'INITIALIZING',
         hasQr: !!qrCodes[id],
+        qrTimestamp: qrTimestamps[id] || null,
         phone: sessionPhones[id] || null
     });
 });
@@ -401,6 +406,7 @@ app.delete('/session/:id', async (req, res) => {
 
     delete sessions[id];
     delete qrCodes[id];
+    delete qrTimestamps[id];
     delete sessionStatus[id];
     delete sessionPhones[id];
 
