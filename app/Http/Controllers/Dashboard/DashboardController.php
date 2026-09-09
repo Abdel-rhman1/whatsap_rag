@@ -8,6 +8,7 @@ use App\Models\HumanRequest;
 use App\Models\Message;
 use App\Services\WhatsAppService;
 use App\Services\TenantContext;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -46,7 +47,7 @@ class DashboardController extends Controller
     public function conversations(Request $request)
     {
         $conversations = Conversation::with(['messages' => function($query) {
-            $query->latest()->limit(50);
+            $query->oldest()->limit(100);
         }])
         ->where('tenant_id', auth('tenant')->id())
         ->get()
@@ -60,28 +61,37 @@ class DashboardController extends Controller
         })
         ->values()
         ->map(function($conv) {
+            $cleanPhone = preg_replace('/@(s\.whatsapp\.net|lid)$/', '', $conv->phone_number ?? '');
+            if (!empty($cleanPhone) && is_numeric($cleanPhone) && !str_starts_with($cleanPhone, '+')) {
+                $cleanPhone = '+' . $cleanPhone;
+            }
+
+            $lastMsg = $conv->messages->last();
+
             return [
                 'id' => $conv->id,
-                'contact_name' => $conv->contact_name,
-                'phone_number' => $conv->phone_number,
+                'contact_name' => $conv->contact_name ?: ($cleanPhone ?: 'WhatsApp User'),
+                'phone_number' => $cleanPhone ?: $conv->phone_number,
+                'raw_phone' => $conv->phone_number,
                 'language' => $conv->language,
                 'platform' => $conv->platform,
                 'session_id' => $conv->session_id,
-                'escalated_to_human' => $conv->escalated_to_human,
-                'last_message_at' => $conv->last_message_at,
-                'created_at' => $conv->created_at,
-                'last_message' => $conv->messages->first()?->content,
-                'source' => $conv->messages->where('role', 'assistant')->first()?->source ?? 'ai',
+                'escalated_to_human' => (bool)$conv->escalated_to_human,
+                'last_message_at' => $conv->last_message_at?->toIso8601String(),
+                'created_at' => $conv->created_at?->toIso8601String(),
+                'last_message' => $lastMsg?->content,
+                'last_message_role' => $lastMsg?->role,
+                'source' => $conv->messages->where('role', 'assistant')->last()?->source ?? 'ai',
                 'messages' => $conv->messages->map(function($msg) {
                     return [
                         'id' => $msg->id,
                         'role' => $msg->role,
                         'source' => $msg->source,
                         'content' => $msg->content,
-                        'created_at' => $msg->created_at,
+                        'created_at' => $msg->created_at?->toIso8601String(),
                         'metadata' => $msg->metadata,
                     ];
-                }),
+                })->values(),
             ];
         });
 
@@ -242,6 +252,22 @@ class DashboardController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    public function toggleEscalation(Request $request, Conversation $conversation)
+    {
+        if ($conversation->tenant_id !== auth('tenant')->id()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $conversation->update([
+            'escalated_to_human' => !$conversation->escalated_to_human,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'escalated_to_human' => (bool)$conversation->escalated_to_human,
+        ]);
     }
 
     public function knowledgeConfigView()

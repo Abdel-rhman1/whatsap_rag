@@ -100,7 +100,7 @@
                                     const resp = await fetch(this.statusUrl);
                                     const data = await resp.json();
                                     
-                                    if (data.status === 'CONNECTED') {
+                                    if (data && data.status === 'CONNECTED') {
                                         this.state = 'connected';
                                         this.statusText = '{{ __('hub.phone_linked_success') }}';
                                         this.stopPolling();
@@ -108,14 +108,18 @@
                                         return;
                                     }
                                     
-                                    if (data.status === 'QR_READY' && data.hasQr) {
+                                    if (data && data.status === 'QR_READY' && data.hasQr) {
+                                        if (data.qrTimestamp && this.qrTimestamp !== data.qrTimestamp) {
+                                            this.qrTimestamp = data.qrTimestamp;
+                                        } else if (!this.qrTimestamp) {
+                                            this.qrTimestamp = Date.now();
+                                        }
                                         this.state = 'qr_ready';
                                         this.statusText = '{{ __('hub.scan_instructions') }}';
-                                        this.qrTimestamp = Date.now();
-                                    } else if (data.status === 'AUTHENTICATING') {
+                                    } else if (data && data.status === 'AUTHENTICATING') {
                                         this.state = 'authenticating';
                                         this.statusText = '{{ __('hub.connecting_check_phone') }}';
-                                    } else if (data.status === 'GATEWAY_OFFLINE') {
+                                    } else if (data && data.status === 'GATEWAY_OFFLINE') {
                                         this.state = 'error';
                                         this.statusText = '{{ __('hub.gateway_offline') }}';
                                         return;
@@ -130,7 +134,7 @@
                                     this.statusText = '{{ __('hub.connection_error_retry') }}';
                                 }
                             }
-                        }" x-init="$watch('showQr', v => { if(!v) stopPolling(); })">
+                        }" x-init="$watch('showQr', v => { if(!v) { stopPolling(); qrTimestamp = 0; } })">
                             <button @click="showQr = true; startPolling()" class="px-4 py-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
                             </button>

@@ -10,6 +10,7 @@ Route::middleware(['auth.tenant'])->group(function () {
     // WhatsApp Conversations & Live Chat
     Route::get('/api/conversations', [\App\Http\Controllers\Dashboard\DashboardController::class, 'conversations'])->name('api.conversations');
     Route::post('/api/conversations/{conversation}/reply', [\App\Http\Controllers\Dashboard\DashboardController::class, 'reply'])->name('api.conversations.reply');
+    Route::post('/api/conversations/{conversation}/toggle-escalation', [\App\Http\Controllers\Dashboard\DashboardController::class, 'toggleEscalation'])->name('api.conversations.toggle-escalation');
     Route::get('/api/human-requests', [\App\Http\Controllers\Dashboard\DashboardController::class, 'humanRequests'])->name('api.human-requests');
     Route::get('/api/pending-alerts', [\App\Http\Controllers\Dashboard\DashboardController::class, 'pendingAlerts'])->name('api.pending-alerts');
     Route::post('/api/pending-alerts/{id}/ignore', [\App\Http\Controllers\Dashboard\DashboardController::class, 'ignoreAlert'])->name('api.pending-alerts.ignore');
@@ -25,6 +26,10 @@ Route::middleware(['auth.tenant'])->group(function () {
     Route::get('/dashboard/knowledge-config', fn () => redirect()->route('dashboard.system-settings'))->name('dashboard.knowledge-config');
     Route::post('/dashboard/system-settings', [\App\Http\Controllers\Dashboard\DashboardController::class, 'updateKnowledgeConfig'])->name('dashboard.system-settings.update');
     Route::post('/dashboard/knowledge-config', [\App\Http\Controllers\Dashboard\DashboardController::class, 'updateKnowledgeConfig'])->name('dashboard.knowledge-config.update');
+
+    // Embeddable Chat Widget Management
+    Route::get('/dashboard/widget', [\App\Http\Controllers\Dashboard\WidgetController::class, 'index'])->name('widget.index');
+    Route::post('/dashboard/widget', [\App\Http\Controllers\Dashboard\WidgetController::class, 'update'])->name('widget.update');
 
     // WhatsApp Session Management
     Route::get('/dashboard/whatsapp', [\App\Http\Controllers\Dashboard\WhatsappController::class, 'index'])->name('whatsapp.index');

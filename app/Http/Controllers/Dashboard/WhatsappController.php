@@ -76,10 +76,11 @@ class WhatsappController extends Controller
             abort(403);
         }
 
-        $gatewayUrl = env('WHATSAPP_GATEWAY_URL', 'http://localhost:3000');
+        $gatewayUrl = config('rag.whatsapp.gateway_url') ?: env('WHATSAPP_GATEWAY_URL', 'http://localhost:3000');
+        $encodedName = rawurlencode($instance->instance_name);
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(5)->get("{$gatewayUrl}/qr/{$instance->instance_name}");
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get("{$gatewayUrl}/qr/{$encodedName}");
 
             // 200 + text "CONNECTED"
             if ($response->status() === 200 && $response->body() === 'CONNECTED') {
@@ -112,11 +113,16 @@ class WhatsappController extends Controller
             abort(403);
         }
 
-        $gatewayUrl = env('WHATSAPP_GATEWAY_URL', 'http://localhost:3000');
+        $gatewayUrl = config('rag.whatsapp.gateway_url') ?: env('WHATSAPP_GATEWAY_URL', 'http://localhost:3000');
+        $encodedName = rawurlencode($instance->instance_name);
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(5)->get("{$gatewayUrl}/status/{$instance->instance_name}");
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get("{$gatewayUrl}/status/{$encodedName}");
             $data = $response->json();
+
+            if (!$response->successful() || !is_array($data)) {
+                return response()->json(['status' => 'INITIALIZING', 'hasQr' => false]);
+            }
 
             // Auto-update phone number and status in DB when connected
             if (isset($data['status']) && $data['status'] === 'CONNECTED') {
@@ -139,11 +145,12 @@ class WhatsappController extends Controller
             abort(403);
         }
 
-        $gatewayUrl = env('WHATSAPP_GATEWAY_URL', 'http://localhost:3000');
+        $gatewayUrl = config('rag.whatsapp.gateway_url') ?: env('WHATSAPP_GATEWAY_URL', 'http://localhost:3000');
+        $encodedName = rawurlencode($instance->instance_name);
 
         // Tell gateway to logout and delete session
         try {
-            \Illuminate\Support\Facades\Http::timeout(10)->delete("{$gatewayUrl}/session/{$instance->instance_name}");
+            \Illuminate\Support\Facades\Http::timeout(10)->delete("{$gatewayUrl}/session/{$encodedName}");
         } catch (\Exception $e) {
             // Gateway might be offline, still delete from DB
         }

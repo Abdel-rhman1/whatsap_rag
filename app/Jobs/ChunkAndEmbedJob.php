@@ -69,9 +69,9 @@ class ChunkAndEmbedJob implements ShouldQueue
                 ];
             }
 
-            UpsertToQdrantJob::dispatch($this->source, $points);
-            
             $this->source->update(['status' => 'embedding_queued']);
+
+            UpsertToQdrantJob::dispatch($this->source, $points);
 
         } catch (Exception $e) {
             $this->source->update([

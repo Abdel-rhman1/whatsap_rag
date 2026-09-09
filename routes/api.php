@@ -13,3 +13,9 @@ Route::middleware(['throttle:100,1'])->group(function () {
 // General RAG Chat API (Sanctum)
 Route::middleware('auth:sanctum')->post('/chat/ask', [ChatController::class, 'ask']);
 
+// Embeddable Chat Widget Endpoints (CORS & API-key / Widget-key protected)
+Route::prefix('widget')->group(function () {
+    Route::match(['get', 'options'], '/config', [\App\Http\Controllers\Api\WidgetApiController::class, 'config']);
+    Route::match(['post', 'options'], '/chat', [\App\Http\Controllers\Api\WidgetApiController::class, 'chat']);
+});
+
