@@ -66,6 +66,9 @@ class BaileysGatewayProvider implements WhatsAppProviderInterface
             return null;
         }
 
+        $isFromMe   = filter_var($request->input('from_me', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->input('is_from_me', false), FILTER_VALIDATE_BOOLEAN);
+
         return new WhatsAppWebhookPayload(
             accountIdentifier: $instanceId,
             from:              $from,
@@ -76,6 +79,7 @@ class BaileysGatewayProvider implements WhatsAppProviderInterface
             mimeType:          $request->input('mime_type'),
             fileName:          $request->input('file_name'),
             messageId:         $request->input('message_id'),
+            isFromMe:          $isFromMe,
             rawPayload:        $request->all()
         );
     }

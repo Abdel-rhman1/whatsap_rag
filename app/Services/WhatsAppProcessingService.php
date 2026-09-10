@@ -56,10 +56,14 @@ class WhatsAppProcessingService
             ];
             $audioSourcePath = null;
 
+            $isFromMe = !empty($payload['from_me']) || !empty($payload['is_from_me']);
+
             if ($messageType === 'audio' && $mediaUrl) {
                 $audioResult = $this->handleAudioMessage($mediaUrl, $tenantId, $pushName, false);
                 if (($audioResult['confidence'] ?? 1.0) < 0.85) {
-                    $this->whatsapp->sendMessage($account, $from, "لم أتمكن من سماع رسالتك جيدًا، ممكن تعيدها؟ 🎧\nI couldn't hear the message well, could you repeat it? 🎧");
+                    if (!$isFromMe) {
+                        $this->whatsapp->sendMessage($account, $from, "لم أتمكن من سماع رسالتك جيدًا، ممكن تعيدها؟ 🎧\nI couldn't hear the message well, could you repeat it? 🎧");
+                    }
                     return;
                 }
                 $processedText = $audioResult['text'];
@@ -72,7 +76,62 @@ class WhatsAppProcessingService
                 $processedText = $body;
                 $sourceType = 'text';
             } else {
-                $this->whatsapp->sendMessage($account, $from, "نوع الرسالة غير مدعوم 🙏");
+                if (!$isFromMe) {
+                    $this->whatsapp->sendMessage($account, $from, "نوع الرسالة غير مدعوم 🙏");
+                }
+                return;
+            }
+
+            // 1. If message is sent by the linked WhatsApp session (human agent/owner), record it and DO NOT call RAG
+            if ($isFromMe) {
+                $recentDuplicate = $conversation->messages()
+                    ->where('role', 'assistant')
+                    ->where('content', $processedText)
+                    ->where('created_at', '>=', now()->subSeconds(15))
+                    ->exists();
+
+                if (!$recentDuplicate) {
+                    \App\Models\Message::create([
+                        'tenant_id'       => $tenantId,
+                        'conversation_id' => $conversation->id,
+                        'role'            => 'assistant',
+                        'source'          => 'human',
+                        'content'         => $processedText,
+                    ]);
+                }
+
+                $conversation->update([
+                    'last_message_at'    => now(),
+                    'escalated_to_human' => true,
+                ]);
+
+                $conversation->humanRequests()->where('status', 'pending')->update([
+                    'status'      => 'resolved',
+                    'resolved_at' => now(),
+                ]);
+
+                Log::info("Recorded outgoing message from linked WhatsApp session without triggering RAG", [
+                    'conversation_id' => $conversation->id,
+                    'from'            => $from,
+                ]);
+
+                return;
+            }
+
+            // 2. If conversation is currently handled by a human agent, record customer message and wait for human response
+            if ($conversation->escalated_to_human) {
+                \App\Models\Message::create([
+                    'tenant_id'       => $tenantId,
+                    'conversation_id' => $conversation->id,
+                    'role'            => 'user',
+                    'content'         => $processedText,
+                ]);
+                $conversation->update(['last_message_at' => now()]);
+
+                Log::info("Incoming customer message held for human agent on escalated conversation", [
+                    'from'            => $from,
+                    'conversation_id' => $conversation->id,
+                ]);
                 return;
             }
 

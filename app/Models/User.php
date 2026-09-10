@@ -60,6 +60,11 @@ class User extends Authenticatable implements HasTenants
         return $this->role === $role;
     }
 
+    public function roleModel(): ?Role
+    {
+        return Role::forTenant($this->tenant_id)->where('slug', $this->role)->first();
+    }
+
     public function hasPermission(string $permission): bool
     {
         return app(\App\Services\PermissionService::class)->hasPermission($this, $permission);

@@ -13,23 +13,40 @@ class TenantUserController extends Controller
 {
     public function index()
     {
-        $users = User::where('tenant_id', $this->getTenantId())->get();
-        return view('dashboard.users.index', compact('users'));
+        $tenantId = $this->getTenantId();
+        $tenant = auth('tenant')->user();
+        if ($tenant instanceof \App\Models\User) {
+            $tenant = $tenant->tenant;
+        }
+        $roles = \App\Models\Role::forTenant($tenantId)->get();
+        $users = User::where('tenant_id', $tenantId)->latest()->get();
+        return view('dashboard.users.index', compact('users', 'tenant', 'roles'));
     }
 
     public function store(Request $request)
     {
+        $tenantId = $this->getTenantId();
+        $tenant = auth('tenant')->user();
+        if ($tenant instanceof \App\Models\User) {
+            $tenant = $tenant->tenant;
+        }
+
+        $validRoles = \App\Models\Role::forTenant($tenantId)->pluck('slug')->toArray();
+        if (empty($validRoles)) {
+            $validRoles = ['tenant_admin', 'agent', 'analyst', 'billing'];
+        }
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'role' => 'required|in:tenant_admin,agent,analyst,billing',
+            'role' => 'required|in:' . implode(',', $validRoles),
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make(Str::random(12)),
-            'tenant_id' => $this->getTenantId(),
+            'tenant_id' => $tenantId,
             'role' => $request->role,
             'is_active' => true,
         ]);
@@ -70,8 +87,14 @@ class TenantUserController extends Controller
     public function updateRole(Request $request, User $user)
     {
         $this->authorizeTenant($user);
+        $tenantId = $this->getTenantId();
+
+        $validRoles = \App\Models\Role::forTenant($tenantId)->pluck('slug')->toArray();
+        if (empty($validRoles)) {
+            $validRoles = ['tenant_admin', 'agent', 'analyst', 'billing'];
+        }
         
-        $request->validate(['role' => 'required|in:tenant_admin,agent,analyst,billing']);
+        $request->validate(['role' => 'required|in:' . implode(',', $validRoles)]);
 
         // Check if user is trying to change their own role
         $currentUser = auth('tenant')->user();

@@ -9,10 +9,16 @@
             <h2 class="text-3xl font-bold tracking-tight">{{ __('hub.team_members') }}</h2>
             <p class="text-slate-400 mt-1">{{ __('hub.manage_team_subtitle') }}</p>
         </div>
-        <button @click="showInviteModal = true" class="px-6 py-3 accent-gradient text-white rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-all shadow-lg shadow-indigo-500/20">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
-            {{ __('hub.invite_member') }}
-        </button>
+        <div class="flex items-center gap-3">
+            <a href="{{ route('roles.index') }}" class="px-5 py-3 glass hover:bg-white/10 text-slate-300 hover:text-white rounded-xl font-semibold flex items-center gap-2 transition-all border border-white/10 text-sm">
+                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                <span>{{ __('hub.manage_roles') ?? 'Manage Roles & Permissions' }}</span>
+            </a>
+            <button @click="showInviteModal = true" class="px-6 py-3 accent-gradient text-white rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-all shadow-lg shadow-indigo-500/20 text-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                {{ __('hub.invite_member') }}
+            </button>
+        </div>
     </div>
 
     <!-- Users Table -->
@@ -29,7 +35,46 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/5">
-                    @foreach($users as $user)
+                    {{-- Primary Account Owner --}}
+                    @if(isset($tenant))
+                        <tr class="bg-indigo-500/[0.04] hover:bg-indigo-500/[0.08] transition-colors group">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center overflow-hidden">
+                                        <img src="https://ui-avatars.com/api/?name={{ urlencode($tenant->name) }}&background=6366f1&color=fff" alt="">
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <p class="text-sm font-bold text-white">{{ $tenant->name }}</p>
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                                {{ __('hub.owner') ?? 'Owner' }}
+                                            </span>
+                                        </div>
+                                        <p class="text-xs text-slate-500">{{ $tenant->email }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 border border-white/10">
+                                    {{ __('hub.tenant_admin') }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+                                    <span class="w-1 h-1 rounded-full bg-emerald-500"></span>
+                                    {{ __('hub.active') }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-xs text-slate-400">{{ $tenant->last_login_at ? $tenant->last_login_at->diffForHumans() : __('hub.never') }}</span>
+                            </td>
+                            <td class="px-6 py-4 {{ app()->getLocale() == 'ar' ? 'text-left' : 'text-right' }}">
+                                <span class="text-xs text-slate-500 font-medium italic">{{ __('hub.primary_account') ?? 'Primary Account' }}</span>
+                            </td>
+                        </tr>
+                    @endif
+
+                    @forelse($users as $user)
                         <tr class="hover:bg-white/[0.02] transition-colors group">
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-3">
@@ -46,10 +91,16 @@
                                 <form action="{{ route('tenant.users.role', $user) }}" method="POST" class="inline">
                                     @csrf
                                     <select onchange="this.form.submit()" name="role" class="bg-slate-900/50 border border-white/10 rounded-lg text-xs font-medium px-2 py-1 text-slate-300 focus:outline-none focus:border-indigo-500 transition-colors">
-                                        <option value="tenant_admin" {{ $user->role === 'tenant_admin' ? 'selected' : '' }}>{{ __('hub.tenant_admin') }}</option>
-                                        <option value="agent" {{ $user->role === 'agent' ? 'selected' : '' }}>{{ __('hub.agent') }}</option>
-                                        <option value="analyst" {{ $user->role === 'analyst' ? 'selected' : '' }}>{{ __('hub.analyst') }}</option>
-                                        <option value="billing" {{ $user->role === 'billing' ? 'selected' : '' }}>{{ __('hub.billing') }}</option>
+                                        @if(isset($roles) && count($roles) > 0)
+                                            @foreach($roles as $r)
+                                                <option value="{{ $r->slug }}" {{ $user->role === $r->slug ? 'selected' : '' }}>{{ $r->name }}</option>
+                                            @endforeach
+                                        @else
+                                            <option value="tenant_admin" {{ $user->role === 'tenant_admin' ? 'selected' : '' }}>{{ __('hub.tenant_admin') }}</option>
+                                            <option value="agent" {{ $user->role === 'agent' ? 'selected' : '' }}>{{ __('hub.agent') }}</option>
+                                            <option value="analyst" {{ $user->role === 'analyst' ? 'selected' : '' }}>{{ __('hub.analyst') }}</option>
+                                            <option value="billing" {{ $user->role === 'billing' ? 'selected' : '' }}>{{ __('hub.billing') }}</option>
+                                        @endif
                                     </select>
                                 </form>
                             </td>
@@ -87,7 +138,15 @@
                                 </div>
                             </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        @if(!isset($tenant))
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center text-slate-500">
+                                    {{ __('hub.no_team_members') }}
+                                </td>
+                            </tr>
+                        @endif
+                    @endforelse
                 </tbody>
             </table>
         </div>
@@ -113,10 +172,18 @@
                 <div>
                     <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{{ __('hub.workspace_role') }}</label>
                     <select name="role" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors">
-                        <option value="agent">{{ __('hub.agent_desc') }}</option>
-                        <option value="analyst">{{ __('hub.analyst_desc') }}</option>
-                        <option value="billing">{{ __('hub.billing_desc') }}</option>
-                        <option value="tenant_admin">{{ __('hub.admin_desc') }}</option>
+                        @if(isset($roles) && count($roles) > 0)
+                            @foreach($roles as $r)
+                                <option value="{{ $r->slug }}" {{ (isset($settings) && $settings->default_role === $r->slug) || (!isset($settings) && $r->slug === 'agent') ? 'selected' : '' }}>
+                                    {{ $r->name }} ({{ $r->description ?? $r->slug }})
+                                </option>
+                            @endforeach
+                        @else
+                            <option value="agent" selected>{{ __('hub.agent_desc') }}</option>
+                            <option value="analyst">{{ __('hub.analyst_desc') }}</option>
+                            <option value="billing">{{ __('hub.billing_desc') }}</option>
+                            <option value="tenant_admin">{{ __('hub.admin_desc') }}</option>
+                        @endif
                     </select>
                 </div>
                 <div class="flex gap-3 pt-4">

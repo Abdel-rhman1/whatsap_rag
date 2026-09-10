@@ -14,6 +14,7 @@ class WhatsAppWebhookPayload
         public ?string $mimeType = null,
         public ?string $fileName = null,
         public ?string $messageId = null,
+        public bool $isFromMe = false,
         public array $rawPayload = []
     ) {}
 
@@ -29,6 +30,8 @@ class WhatsAppWebhookPayload
             'mime_type'   => $this->mimeType,
             'file_name'   => $this->fileName,
             'message_id'  => $this->messageId,
+            'is_from_me'  => $this->isFromMe,
+            'from_me'     => $this->isFromMe,
             'raw'         => $this->rawPayload,
         ];
     }

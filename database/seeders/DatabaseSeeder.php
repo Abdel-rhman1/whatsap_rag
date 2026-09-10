@@ -76,7 +76,7 @@ class DatabaseSeeder extends Seeder
         );
 
         // 3. Create Demo Tenants
-        Tenant::firstOrCreate(
+        $demoTenant = Tenant::firstOrCreate(
             ['email' => 'demo@raghub.com'],
             [
                 'name' => 'Demo Startup',
@@ -88,7 +88,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        Tenant::firstOrCreate(
+        $testTenant = Tenant::firstOrCreate(
             ['email' => 'test@raghub.com'],
             [
                 'name' => 'Test Corp',
@@ -99,5 +99,49 @@ class DatabaseSeeder extends Seeder
                 'qdrant_collection' => 'test_collection'
             ]
         );
+
+        // 4. Create Demo Team Members for Tenants
+        $demoUsers = [
+            [
+                'name' => 'Sarah Jenkins',
+                'email' => 'sarah@demo.com',
+                'password' => Hash::make('password123'),
+                'tenant_id' => $demoTenant->id,
+                'role' => 'agent',
+                'is_active' => true,
+                'last_login_at' => now()->subHours(2),
+            ],
+            [
+                'name' => 'Michael Chen',
+                'email' => 'michael@demo.com',
+                'password' => Hash::make('password123'),
+                'tenant_id' => $demoTenant->id,
+                'role' => 'analyst',
+                'is_active' => true,
+                'last_login_at' => now()->subDays(1),
+            ],
+            [
+                'name' => 'Alex Rivera',
+                'email' => 'alex@demo.com',
+                'password' => Hash::make('password123'),
+                'tenant_id' => $demoTenant->id,
+                'role' => 'billing',
+                'is_active' => true,
+                'last_login_at' => now()->subDays(3),
+            ],
+            [
+                'name' => 'David Miller',
+                'email' => 'david@test.com',
+                'password' => Hash::make('password123'),
+                'tenant_id' => $testTenant->id,
+                'role' => 'agent',
+                'is_active' => true,
+                'last_login_at' => now()->subHours(5),
+            ]
+        ];
+
+        foreach ($demoUsers as $userData) {
+            User::firstOrCreate(['email' => $userData['email']], $userData);
+        }
     }
 }

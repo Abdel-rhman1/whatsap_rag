@@ -54,6 +54,19 @@ Route::middleware(['auth.tenant'])->group(function () {
         Route::post('/dashboard/users/{user}/role', [\App\Http\Controllers\Dashboard\TenantUserController::class, 'updateRole'])->name('tenant.users.role');
     });
 
+    // Roles & Access Control
+    Route::middleware(['permission:users.view'])->group(function () {
+        Route::get('/dashboard/roles', [\App\Http\Controllers\Dashboard\RoleController::class, 'index'])->name('roles.index');
+    });
+
+    Route::middleware(['permission:settings.manage'])->group(function () {
+        Route::get('/dashboard/roles/create', [\App\Http\Controllers\Dashboard\RoleController::class, 'create'])->name('roles.create');
+        Route::post('/dashboard/roles', [\App\Http\Controllers\Dashboard\RoleController::class, 'store'])->name('roles.store');
+        Route::get('/dashboard/roles/{role}/edit', [\App\Http\Controllers\Dashboard\RoleController::class, 'edit'])->name('roles.edit');
+        Route::put('/dashboard/roles/{role}', [\App\Http\Controllers\Dashboard\RoleController::class, 'update'])->name('roles.update');
+        Route::delete('/dashboard/roles/{role}', [\App\Http\Controllers\Dashboard\RoleController::class, 'destroy'])->name('roles.destroy');
+    });
+
     // Profile Routes
     Route::get('/dashboard/profile', [\App\Http\Controllers\Dashboard\ProfileController::class, 'index'])->name('profile.index');
     Route::post('/dashboard/profile', [\App\Http\Controllers\Dashboard\ProfileController::class, 'update'])->name('profile.update');

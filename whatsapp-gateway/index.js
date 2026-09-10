@@ -57,6 +57,45 @@ const qrCodes = {};
 const qrTimestamps = {};
 const sessionStatus = {}; // 'INITIALIZING', 'QR_READY', 'AUTHENTICATING', 'LINKING', 'CONNECTED', 'FAILED'
 const sessionPhones = {};
+const recentApiSentIds = new Set(); // Message IDs sent via HTTP API to avoid duplicate processing
+
+function isMessageFromMe(sock, state, instanceId, msg) {
+    if (msg.key?.fromMe) return true;
+
+    const me = sock?.user || state?.creds?.me;
+    const myPhone = sessionPhones[instanceId] || (me?.id ? me.id.split(':')[0].split('@')[0] : null);
+    const myJid = me?.id ? me.id.split(':')[0] : null;
+    const myLid = me?.lid ? me.lid.split(':')[0] : null;
+
+    const clean = (jid) => {
+        if (!jid) return '';
+        return jid.split(':')[0].split('@')[0];
+    };
+
+    const participantClean = clean(msg.key?.participant || msg.participant);
+    const remoteClean = clean(msg.key?.remoteJid);
+
+    // If sender participant matches my phone, JID, or LID (crucial for groups & companion sync)
+    if (participantClean) {
+        if (myPhone && (participantClean === myPhone || participantClean.startsWith(myPhone))) return true;
+        if (myLid && (participantClean === myLid || participantClean.startsWith(myLid))) return true;
+        if (myJid && (participantClean === myJid || participantClean.startsWith(myJid))) return true;
+    }
+
+    // Direct message to self ("Message Yourself" on WhatsApp)
+    if (remoteClean) {
+        if (myPhone && remoteClean === myPhone) return true;
+        if (myLid && remoteClean === myLid) return true;
+        if (myJid && remoteClean === myJid) return true;
+    }
+
+    // Match pushName if identical to owner name and participant is empty/companion
+    if (me?.name && msg.pushName && msg.pushName.trim() === me.name.trim()) {
+        return true;
+    }
+
+    return false;
+}
 
 // Logger configuration
 const logger = pino({ level: 'silent' }); // Silent pino to keep console clean for our custom logs
@@ -185,34 +224,60 @@ async function startSession(id, force = false) {
         // Save credentials as they update
         sock.ev.on('creds.update', saveCreds);
 
-        // Handle Incoming Messages
+        // Handle Incoming & Synced Messages
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
 
             for (const msg of messages) {
-                // Skip if message has no content or is from self
-                if (!msg.message || msg.key.fromMe) continue;
+                if (!msg.message) continue;
 
-                const from = msg.key.remoteJid;
+                const from = msg.key?.remoteJid;
+                if (!from) continue;
+
+                // Skip status broadcasts, broadcast lists, and newsletters/channels
+                if (from === 'status@broadcast' || from.endsWith('@broadcast') || from.endsWith('@newsletter')) {
+                    continue;
+                }
+
+                // If this message was sent via our own HTTP /send API, it was already handled by Laravel
+                if (msg.key?.id && recentApiSentIds.has(msg.key.id)) {
+                    continue;
+                }
+
+                // Detect if message is sent by the linked session owner (phone, web, or companion)
+                const fromMe = isMessageFromMe(sock, state, id, msg);
+
                 const pushName = msg.pushName || 'Guest';
 
                 // Enhanced message detection
-                const messageType = Object.keys(msg.message)[0];
+                const content = msg.message.ephemeralMessage?.message
+                    || msg.message.viewOnceMessage?.message
+                    || msg.message.viewOnceMessageV2?.message
+                    || msg.message;
+
                 let body = '';
                 let typeOfMsg = 'text';
                 let mediaUrl = null;
                 let fileName = null;
                 let mimeType = null;
 
-                if (msg.message.conversation) {
-                    body = msg.message.conversation;
-                } else if (msg.message.extendedTextMessage) {
-                    body = msg.message.extendedTextMessage.text;
-                } else if (msg.message.buttonsResponseMessage) {
-                    body = msg.message.buttonsResponseMessage.selectedButtonId;
-                } else if (msg.message.audioMessage) {
+                if (content.conversation) {
+                    body = content.conversation;
+                } else if (content.extendedTextMessage) {
+                    body = content.extendedTextMessage.text;
+                } else if (content.buttonsResponseMessage) {
+                    body = content.buttonsResponseMessage.selectedButtonId;
+                } else if (content.imageMessage) {
+                    typeOfMsg = 'image';
+                    body = content.imageMessage.caption || '';
+                    mimeType = content.imageMessage.mimetype;
+                } else if (content.videoMessage) {
+                    typeOfMsg = 'video';
+                    body = content.videoMessage.caption || '';
+                    mimeType = content.videoMessage.mimetype;
+                } else if (content.audioMessage) {
                     typeOfMsg = 'audio';
-                    mimeType = msg.message.audioMessage.mimetype;
+                    mimeType = content.audioMessage.mimetype;
                     try {
                         log(id, 'Downloading audio message...');
                         const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger });
@@ -224,10 +289,10 @@ async function startSession(id, force = false) {
                     } catch (e) {
                         log(id, `Audio download failed: ${e.message}`);
                     }
-                } else if (msg.message.documentMessage) {
+                } else if (content.documentMessage) {
                     typeOfMsg = 'document';
-                    fileName = msg.message.documentMessage.fileName;
-                    mimeType = msg.message.documentMessage.mimetype;
+                    fileName = content.documentMessage.fileName;
+                    mimeType = content.documentMessage.mimetype;
                     try {
                         const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger });
                         const name = `doc_${Date.now()}_${fileName}`;
@@ -242,10 +307,14 @@ async function startSession(id, force = false) {
 
                 if (!body && !mediaUrl) continue;
 
-                log(id, `Received ${typeOfMsg} from ${from} (${pushName}): ${body.substring(0, 50)}...`);
+                if (fromMe) {
+                    log(id, `Outgoing ${typeOfMsg} from linked session to ${from}: ${body.substring(0, 50)}...`);
+                } else {
+                    log(id, `Received ${typeOfMsg} from ${from} (${pushName}): ${body.substring(0, 50)}...`);
+                }
 
-                // Forward to Laravel Webhook with enhanced payload
-                forwardToWebhook(id, from, pushName, body, typeOfMsg, mediaUrl, mimeType, fileName);
+                // Forward to Laravel Webhook with enhanced payload including fromMe flag
+                forwardToWebhook(id, from, pushName, body, typeOfMsg, mediaUrl, mimeType, fileName, fromMe);
             }
         });
 
@@ -259,7 +328,7 @@ async function startSession(id, force = false) {
 /**
  * Forward message to Laravel Webhook
  */
-async function forwardToWebhook(instanceId, from, pushName, body, type = 'text', mediaUrl = null, mimeType = null, fileName = null) {
+async function forwardToWebhook(instanceId, from, pushName, body, type = 'text', mediaUrl = null, mimeType = null, fileName = null, fromMe = false) {
     const webhookUrl = process.env.WHATSAPP_WEBHOOK_URL || `${process.env.APP_URL}/api/whatsapp/webhook`;
     const secret = process.env.WHATSAPP_SECRET;
 
@@ -277,6 +346,8 @@ async function forwardToWebhook(instanceId, from, pushName, body, type = 'text',
         media_url: mediaUrl,
         mime_type: mimeType,
         file_name: fileName,
+        from_me: fromMe,
+        is_from_me: fromMe,
         timestamp: Date.now()
     });
 
@@ -360,6 +431,11 @@ app.post('/send', async (req, res) => {
             sendPromise,
             new Promise((_, reject) => setTimeout(() => reject(new Error('Internal Gateway Timeout')), 30000))
         ]);
+
+        if (result?.key?.id) {
+            recentApiSentIds.add(result.key.id);
+            setTimeout(() => recentApiSentIds.delete(result.key.id), 60000);
+        }
 
         res.json({ success: true, message: 'Sent', data: result });
     } catch (e) {

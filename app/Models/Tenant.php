@@ -127,6 +127,31 @@ class Tenant extends Authenticatable
         $this->update(['status' => 'active']);
     }
 
+    public function roles(): HasMany
+    {
+        return $this->hasMany(Role::class);
+    }
+
+    public function permissionSettings(): HasOne
+    {
+        return $this->hasOne(TenantPermissionSetting::class);
+    }
+
+    public function getPermissionSettings(): TenantPermissionSetting
+    {
+        return $this->permissionSettings ?? TenantPermissionSetting::firstOrCreate([
+            'tenant_id' => $this->id,
+        ], [
+            'allow_member_invites' => true,
+            'default_role' => 'agent',
+            'require_2fa_for_admins' => false,
+            'allow_conversation_export' => false,
+            'mask_customer_pii' => false,
+            'session_timeout_minutes' => 120,
+            'enabled_modules' => ['conversations', 'whatsapp', 'knowledge', 'widget', 'sla', 'campaigns', 'api', 'billing', 'settings'],
+        ]);
+    }
+
     public function hasRole(string $role): bool
     {
         return $role === 'tenant_admin'; // The main tenant account is always admin
